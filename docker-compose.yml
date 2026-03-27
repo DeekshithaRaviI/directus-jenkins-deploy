@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+
+  # ─────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────
+  database:
+    image: postgres:15
+    container_name: directus_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: directus
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: directus
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U directus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Directus CMS
+  # ─────────────────────────────────────────
+  directus:
+    image: directus/directus:latest
+    container_name: directus_app
+    restart: unless-stopped
+    ports:
+      - "8055:8055"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      SECRET: ${SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_CLIENT: pg
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_DATABASE: directus
+      DB_USER: directus
+      DB_PASSWORD: ${DB_PASSWORD}
+      WEBSOCKETS_ENABLED: "true"
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+
+# ─────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────
+volumes:
+  db_data:
+  directus_uploads:
+  directus_extensions:
