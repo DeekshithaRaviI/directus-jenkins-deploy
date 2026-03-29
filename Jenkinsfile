@@ -36,7 +36,7 @@ pipeline {
 
                 stage('Docker Validate') {
                     steps {
-                        sh 'docker compose config || true'  
+                        sh 'docker-compose -f docker-compose.yml config || true'
                     }
                 }
 
@@ -48,9 +48,11 @@ pipeline {
         // ─────────────────────────────────────────
         stage('Plan') {
             steps {
-                dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform plan -out=tfplan'
+                timeout(time: 10, unit: 'MINUTES') {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform plan -out=tfplan'
+                    }
                 }
             }
             post {
@@ -65,21 +67,19 @@ pipeline {
         // ─────────────────────────────────────────
         stage('Provision') {
             steps {
-                // Manual approval before provisioning
                 input message: 'Approve infrastructure provisioning?', ok: 'Provision Now'
 
-                dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform apply -auto-approve'
-
-                    // Extract outputs and save to files
-                    sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
-                    sh 'terraform output -raw private_key > ../ssh_key.pem'
-                    sh 'chmod 600 ../ssh_key.pem'
+                timeout(time: 15, unit: 'MINUTES') {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform apply -auto-approve'
+                        sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
+                        sh 'terraform output -raw private_key > ../ssh_key.pem'
+                        sh 'chmod 600 ../ssh_key.pem'
+                    }
                 }
 
-                // Stash the files for next stages
-                stash includes: 'server_ip.txt, ssh_key.pem', name: 'infra-outputs'
+                stash includes: 'server_ip.txt,ssh_key.pem', name: 'infra-outputs'
             }
             post {
                 always {
@@ -93,44 +93,37 @@ pipeline {
         // ─────────────────────────────────────────
         stage('Deploy') {
             steps {
-                // Get the files from provision stage
                 unstash 'infra-outputs'
 
                 script {
                     def serverIp = readFile('server_ip.txt').trim()
 
-                    // Wait for SSH to be ready
                     sh """
                         echo "Waiting for server to be ready..."
                         sleep 60
                     """
 
-                    // Copy docker-compose.yml to server
                     sh """
                         scp -i ssh_key.pem \
                             -o StrictHostKeyChecking=no \
+                            -o ConnectTimeout=30 \
                             docker-compose.yml \
                             ubuntu@${serverIp}:/home/ubuntu/docker-compose.yml
                     """
 
-                    // Generate .env on server and run docker compose
                     sh """
                         ssh -i ssh_key.pem \
                             -o StrictHostKeyChecking=no \
-                            ubuntu@${serverIp} '
-                                # Create .env file from CI/CD variables
+                            -o ConnectTimeout=30 \
+                            ubuntu@${serverIp} bash << 'ENDSSH'
                                 cat > /home/ubuntu/.env << EOF
 ADMIN_EMAIL=${env.ADMIN_EMAIL}
 ADMIN_PASSWORD=${env.ADMIN_PASSWORD}
 DB_PASSWORD=${env.DB_PASSWORD}
 SECRET=${env.DIRECTUS_SECRET}
 EOF
-
-                                # Run docker compose
                                 cd /home/ubuntu
-                                docker compose up -d
-
-                                # Wait for Directus to be healthy
+                                docker-compose up -d
                                 echo "Waiting for Directus to start..."
                                 for i in \$(seq 1 12); do
                                     if curl -s http://localhost:8055 > /dev/null; then
@@ -140,7 +133,7 @@ EOF
                                     echo "Attempt \$i - waiting 10 seconds..."
                                     sleep 10
                                 done
-                            '
+ENDSSH
                     """
                 }
             }
@@ -200,10 +193,10 @@ EOF
 # Deployment Report
 
 ## Server Details
-- **Server IP:** ${serverIp}
-- **Directus URL:** http://${serverIp}:8055
-- **Pipeline:** ${env.JOB_NAME} #${env.BUILD_NUMBER}
-- **Date:** \$(date)
+- Server IP: ${serverIp}
+- Directus URL: http://${serverIp}:8055
+- Pipeline: ${env.JOB_NAME} #${env.BUILD_NUMBER}
+- Date: \$(date)
 
 ## Status
 - Infrastructure: Provisioned
@@ -230,9 +223,11 @@ EOF
             steps {
                 input message: 'Destroy all infrastructure?', ok: 'Destroy Now'
 
-                dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform destroy -auto-approve'
+                timeout(time: 15, unit: 'MINUTES') {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform destroy -auto-approve'
+                    }
                 }
             }
             post {
@@ -255,7 +250,7 @@ EOF
             echo 'Pipeline failed! Check logs above.'
         }
         always {
-            cleanWs() // Clean workspace after pipeline
+            cleanWs()
         }
     }
 }
