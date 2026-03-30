@@ -63,31 +63,27 @@ pipeline {
         }
 
         // ─────────────────────────────────────────
-        // STAGE 3: PROVISION (manual trigger)
+        // STAGE 3: PROVISION (automatic)
         // ─────────────────────────────────────────
         stage('Provision') {
-    input {
-        message 'Approve infrastructure provisioning?'
-        ok 'Provision Now'
-    }
-    steps {
-        timeout(time: 15, unit: 'MINUTES') {
-            dir('terraform') {
-                sh 'terraform init'
-                sh 'terraform apply -auto-approve'
-                sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
-                sh 'terraform output -raw private_key > ../ssh_key.pem'
-                sh 'chmod 600 ../ssh_key.pem'
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform apply -auto-approve'
+                        sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
+                        sh 'terraform output -raw private_key > ../ssh_key.pem'
+                        sh 'chmod 600 ../ssh_key.pem'
+                    }
+                }
+                stash includes: 'server_ip.txt,ssh_key.pem', name: 'infra-outputs'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'server_ip.txt', allowEmptyArchive: true
+                }
             }
         }
-        stash includes: 'server_ip.txt,ssh_key.pem', name: 'infra-outputs'
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'server_ip.txt', allowEmptyArchive: true
-        }
-    }
-}
 
         // ─────────────────────────────────────────
         // STAGE 4: DEPLOY
@@ -95,7 +91,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 unstash 'infra-outputs'
-
                 script {
                     def serverIp = readFile('server_ip.txt').trim()
 
@@ -218,12 +213,10 @@ EOF
         }
 
         // ─────────────────────────────────────────
-        // STAGE 6: CLEANUP (manual trigger)
+        // STAGE 6: CLEANUP (automatic)
         // ─────────────────────────────────────────
         stage('Cleanup') {
             steps {
-                input message: 'Destroy all infrastructure?', ok: 'Destroy Now'
-
                 timeout(time: 15, unit: 'MINUTES') {
                     dir('terraform') {
                         sh 'terraform init'
