@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'DESTROY_INFRA',
+            choices: ['false', 'true'],
+            description: 'Set to true to destroy all infrastructure'
+        )
+    }
+
     environment {
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
@@ -13,9 +21,6 @@ pipeline {
 
     stages {
 
-        // ─────────────────────────────────────────
-        // STAGE 1: VALIDATE
-        // ─────────────────────────────────────────
         stage('Validate') {
             parallel {
 
@@ -43,9 +48,6 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 2: PLAN
-        // ─────────────────────────────────────────
         stage('Plan') {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
@@ -62,9 +64,6 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 3: PROVISION (automatic)
-        // ─────────────────────────────────────────
         stage('Provision') {
             steps {
                 timeout(time: 15, unit: 'MINUTES') {
@@ -85,9 +84,6 @@ pipeline {
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 4: DEPLOY
-        // ─────────────────────────────────────────
         stage('Deploy') {
             steps {
                 unstash 'infra-outputs'
@@ -141,9 +137,6 @@ ENDSSH
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 5: TEST
-        // ─────────────────────────────────────────
         stage('Test') {
             parallel {
 
@@ -213,10 +206,11 @@ EOF
             }
         }
 
-        // ─────────────────────────────────────────
-        // STAGE 6: CLEANUP (automatic)
-        // ─────────────────────────────────────────
+        // CLEANUP - only runs when DESTROY_INFRA=true
         stage('Cleanup') {
+            when {
+                expression { return params.DESTROY_INFRA == 'true' }
+            }
             steps {
                 timeout(time: 15, unit: 'MINUTES') {
                     dir('terraform') {
@@ -234,9 +228,6 @@ EOF
 
     }
 
-    // ─────────────────────────────────────────
-    // POST PIPELINE ACTIONS
-    // ─────────────────────────────────────────
     post {
         success {
             echo 'Pipeline completed successfully!'
