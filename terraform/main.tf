@@ -87,14 +87,14 @@ resource "aws_instance" "directus_server" {
 
   # Install Docker & Docker Compose at boot
   user_data = <<-EOF
-    #!/bin/bash
-    apt-get update -y
-    apt-get install -y docker.io docker-compose-plugin
-    systemctl start docker
-    systemctl enable docker
-    usermod -aG docker ubuntu
-  EOF
-
+  #!/bin/bash
+  apt-get update -y
+  apt-get install -y docker.io docker-compose
+  systemctl start docker
+  systemctl enable docker
+  usermod -aG docker ubuntu
+  chmod 666 /var/run/docker.sock
+EOF
   tags = {
     Name = "${var.project_name}-server"
   }

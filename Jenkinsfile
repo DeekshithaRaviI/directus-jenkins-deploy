@@ -96,7 +96,7 @@ pipeline {
 
                     sh """
                         echo "Waiting for server to be ready..."
-                        sleep 60
+                        sleep 90
                     """
 
                     sh """
@@ -118,10 +118,9 @@ ADMIN_PASSWORD=${env.ADMIN_PASSWORD}
 DB_PASSWORD=${env.DB_PASSWORD}
 SECRET=${env.DIRECTUS_SECRET}
 EOF
+                                sudo chmod 666 /var/run/docker.sock
                                 cd /home/ubuntu
-                                sudo apt-get install -y docker-compose || true
-                                docker-compose up -d
-                            
+                                sudo docker-compose up -d
                                 echo "Waiting for Directus to start..."
                                 for i in \$(seq 1 12); do
                                     if curl -s http://localhost:8055 > /dev/null; then
