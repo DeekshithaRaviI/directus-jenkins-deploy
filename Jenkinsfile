@@ -66,27 +66,28 @@ pipeline {
         // STAGE 3: PROVISION (manual trigger)
         // ─────────────────────────────────────────
         stage('Provision') {
-            steps {
-                input message: 'Approve infrastructure provisioning?', ok: 'Provision Now'
-
-                timeout(time: 15, unit: 'MINUTES') {
-                    dir('terraform') {
-                        sh 'terraform init'
-                        sh 'terraform apply -auto-approve'
-                        sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
-                        sh 'terraform output -raw private_key > ../ssh_key.pem'
-                        sh 'chmod 600 ../ssh_key.pem'
-                    }
-                }
-
-                stash includes: 'server_ip.txt,ssh_key.pem', name: 'infra-outputs'
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'server_ip.txt', allowEmptyArchive: true
-                }
+    input {
+        message 'Approve infrastructure provisioning?'
+        ok 'Provision Now'
+    }
+    steps {
+        timeout(time: 15, unit: 'MINUTES') {
+            dir('terraform') {
+                sh 'terraform init'
+                sh 'terraform apply -auto-approve'
+                sh 'terraform output -raw instance_public_ip > ../server_ip.txt'
+                sh 'terraform output -raw private_key > ../ssh_key.pem'
+                sh 'chmod 600 ../ssh_key.pem'
             }
         }
+        stash includes: 'server_ip.txt,ssh_key.pem', name: 'infra-outputs'
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'server_ip.txt', allowEmptyArchive: true
+        }
+    }
+}
 
         // ─────────────────────────────────────────
         // STAGE 4: DEPLOY
