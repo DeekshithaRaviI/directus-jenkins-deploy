@@ -4,7 +4,7 @@ pipeline {
     environment {
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-        AWS_DEFAULT_REGION    = 'us-east-1'
+        AWS_DEFAULT_REGION    = 'ap-south-1'
         ADMIN_EMAIL           = credentials('admin-email')
         ADMIN_PASSWORD        = credentials('admin-password')
         DB_PASSWORD           = credentials('db-password')
@@ -119,7 +119,9 @@ DB_PASSWORD=${env.DB_PASSWORD}
 SECRET=${env.DIRECTUS_SECRET}
 EOF
                                 cd /home/ubuntu
+                                sudo apt-get install -y docker-compose || true
                                 docker-compose up -d
+                            
                                 echo "Waiting for Directus to start..."
                                 for i in \$(seq 1 12); do
                                     if curl -s http://localhost:8055 > /dev/null; then
